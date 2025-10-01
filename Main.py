@@ -1,4 +1,5 @@
 import sys
+import re
 import pandas as pd
 from datetime import datetime
 from PyQt6.QtWidgets import (
@@ -51,6 +52,7 @@ class RawMaterialApp(QWidget):
         ])
         self.month_combo.setCurrentIndex(0)
         self.month_combo.setMinimumWidth(120)
+        self.month_combo.currentIndexChanged.connect(self.generate_table)
         input_action_layout.addWidget(self.month_combo)
 
         # Year input
@@ -58,15 +60,22 @@ class RawMaterialApp(QWidget):
         self.year_edit = QLineEdit()
         self.year_edit.setFont(QFont("Segoe UI", 10))
         self.year_edit.setPlaceholderText("e.g., 2023")
-        self.year_edit.setText(str(datetime.now().year - 2))
+        self.year_edit.setText(str(datetime.now().year - 1))
         self.year_edit.setFixedWidth(80)
+        self.year_edit.returnPressed.connect(self.generate_table)
         input_action_layout.addWidget(self.year_edit)
 
-        # Buttons
-        self.generate_button = QPushButton("Refresh View")
-        self.generate_button.clicked.connect(self.generate_table)
-        input_action_layout.addWidget(self.generate_button)
+        # Filter dropdown
+        input_action_layout.addWidget(QLabel("Display:"))
+        self.filter_combo = QComboBox()
+        self.filter_combo.setFont(QFont("Segoe UI", 10))
+        self.filter_combo.addItems(["All Data", "Set 1", "Set 2", "Set 3"])
+        self.filter_combo.setCurrentIndex(0)
+        self.filter_combo.setMinimumWidth(150)
+        self.filter_combo.currentIndexChanged.connect(self.apply_filter)
+        input_action_layout.addWidget(self.filter_combo)
 
+        # Buttons
         self.load_excel_button = QPushButton("Load from Excel")
         self.load_excel_button.clicked.connect(self.load_data_from_excel)
         input_action_layout.addWidget(self.load_excel_button)
@@ -80,8 +89,9 @@ class RawMaterialApp(QWidget):
         # --- Table ---
         self.table_widget = QTableWidget()
         self.table_widget.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table_widget.setAlternatingRowColors(True)
         self.table_widget.setFont(QFont("Segoe UI", 9))
+        # Enable horizontal scrolling
+        self.table_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         main_layout.addWidget(self.table_widget)
 
         self.setLayout(main_layout)
@@ -92,7 +102,6 @@ class RawMaterialApp(QWidget):
         palette.setColor(QPalette.ColorRole.Window, QColor("#F0F2F5"))
         palette.setColor(QPalette.ColorRole.WindowText, QColor("#333333"))
         palette.setColor(QPalette.ColorRole.Base, QColor("#FFFFFF"))
-        palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#E8ECF1"))
         palette.setColor(QPalette.ColorRole.Text, QColor("#333333"))
         palette.setColor(QPalette.ColorRole.Highlight, QColor("#4A90E2"))
         palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#FFFFFF"))
@@ -124,7 +133,7 @@ class RawMaterialApp(QWidget):
 
     # ---------------- TABLE GENERATION ----------------
     def generate_table(self):
-        """Setup table headers for a 12-month range."""
+        """Setup table headers from user-specified month/year to current month/year."""
         try:
             start_month_index = self.month_combo.currentIndex() + 1
             start_year = int(self.year_edit.text())
@@ -132,23 +141,38 @@ class RawMaterialApp(QWidget):
             QMessageBox.warning(self, "Invalid Input", "Please enter a valid year.")
             return
 
+        # Get current date
+        current_date = datetime.now()
+        current_month = current_date.month
+        current_year = current_date.year
+
+        # Calculate months between start and current date
         headers = ["Raw Material Code"]
         self.month_years_for_headers = []
-        current_month, current_year = start_month_index, start_year
+        start_date = pd.to_datetime(f"{start_month_index:02d}/01/{start_year}")
+        end_date = pd.to_datetime(f"{current_month:02d}/01/{current_year}")
 
-        for _ in range(12):
-            month_name = datetime(current_year, current_month, 1).strftime("%b %Y")
+        # Generate month-year headers
+        current_date = start_date
+        while current_date <= end_date:
+            month_name = current_date.strftime("%b %Y")
             headers.append(month_name)
             self.month_years_for_headers.append(month_name)
-            current_month += 1
-            if current_month > 12:
-                current_month, current_year = 1, current_year + 1
+            current_date = (current_date + pd.offsets.MonthBegin(1)).replace(day=1)
 
+        # Set up table
         self.table_widget.setColumnCount(len(headers))
         self.table_widget.setHorizontalHeaderLabels(headers)
-        self.table_widget.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table_widget.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+
+        # Set specific column widths
+        self.table_widget.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        self.table_widget.setColumnWidth(0, 150)  # Raw Material Code: 150px
+        for col in range(1, len(headers)):
+            self.table_widget.setColumnWidth(col, 100)  # Month-Year columns: 100px each
+
         self.table_widget.setRowCount(0)
+        if self._current_df is not None:
+            self.populate_table(self._current_df)
 
     # ---------------- LOAD EXCEL ----------------
     def load_data_from_excel(self):
@@ -160,20 +184,30 @@ class RawMaterialApp(QWidget):
             progress = QProgressDialog("Loading Excel file...", None, 0, 0, self)
             progress.setWindowModality(Qt.WindowModality.WindowModal)
             progress.setCancelButton(None)
+            progress.setAutoClose(False)  # keep control until we close it
             progress.show()
             QApplication.processEvents()
+
+            # --- Center it on the parent window ---
+            progress.move(
+                self.geometry().center() - progress.rect().center()
+            )
 
             df = pd.read_excel(file_name, sheet_name=0)
             self._current_df = df
             self.table_widget.clearContents()
 
             self.generate_table()
-            self.populate_table(df)
 
             progress.close()
         except Exception as e:
             progress.close()
             QMessageBox.critical(self, "Error", f"Error loading Excel file: {e}")
+
+    # ---------------- FILTER TABLE ----------------
+    def apply_filter(self):
+        if self._current_df is not None:
+            self.populate_table(self._current_df)
 
     # ---------------- POPULATE TABLE ----------------
     def populate_table(self, df):
@@ -193,9 +227,9 @@ class RawMaterialApp(QWidget):
         df["prod_date"] = pd.to_datetime(df["prod_date"], errors="coerce")
         df = df.dropna(subset=["prod_date"])
 
-        # Date filter
+        # Date filter from start month/year to current month
         start_date = pd.to_datetime(f"{self.month_combo.currentText()} {self.year_edit.text()}")
-        end_date = start_date + pd.offsets.MonthEnd(12)
+        end_date = pd.to_datetime(datetime.now().strftime("%b %Y"))
         df = df[(df["prod_date"] >= start_date) & (df["prod_date"] <= end_date)]
 
         # Numeric conversion
@@ -218,40 +252,56 @@ class RawMaterialApp(QWidget):
             values="qty used", aggfunc="sum", fill_value=0
         )
 
-        # Ensure all required months appear
+        def natural_keys(text):
+            """
+            Alphanumeric sort key:
+            Splits string into list of [text, number, text, number, ...]
+            Numbers are converted to int, text stays lowercase string.
+            """
+            return tuple(int(s) if s.isdigit() else s.lower() for s in re.split(r'(\d+)', str(text)))
+
+        # Ensure all header months are in pivot table
         for m in self.month_years_for_headers:
             if m not in pivot_df.columns:
                 pivot_df[m] = 0
 
-        # Add sorting helpers
-        pivot_df['code_length'] = pivot_df['raw material'].str.len()
-        pivot_df['length_category'] = pd.cut(
-            pivot_df['code_length'],
-            bins=[-float('inf'), 5, 10, float('inf')],
-            labels=[1, 2, 3],
-            include_lowest=True
+        pivot_df = pivot_df.reset_index()[["raw material"] + self.month_years_for_headers]
+
+        # Apply filter based on dropdown
+        filter_choice = self.filter_combo.currentText()
+        pivot_df["len_category"] = pd.cut(
+            pivot_df["raw material"].str.len(),
+            bins=[-1, 5, 10, float("inf")],
+            labels=[1, 2, 3]
         )
+        if filter_choice == "Set 1":
+            pivot_df = pivot_df[pivot_df["len_category"] == 1]
+        elif filter_choice == "Set 2":
+            pivot_df = pivot_df[pivot_df["len_category"] == 2]
+        elif filter_choice == "Set 3":
+            pivot_df = pivot_df[pivot_df["len_category"] == 3]
 
-        # Sort by category, then raw material
-        pivot_df = pivot_df.sort_values(by=['length_category', 'raw material'])
-
-        # Reorder columns (keep length_category if you want to debug)
-        columns_to_select = ["raw material"] + self.month_years_for_headers
-        pivot_df = pivot_df[columns_to_select].reset_index(drop=True)
+        # ✅ Sort by length category first, then natural order of raw material
+        pivot_df = pivot_df.sort_values(
+            by=["len_category", "raw material"],
+            key=lambda col: col.map(natural_keys) if col.name == "raw material" else col
+        )
+        pivot_df = pivot_df.drop(columns=["len_category"])
 
         # Populate QTableWidget
         self.table_widget.setRowCount(len(pivot_df))
         self.table_widget.setUpdatesEnabled(False)
         try:
-            for row_idx, row in pivot_df.iterrows():
-                # Code
-                item_code = QTableWidgetItem(str(row["raw material"]))
+            for row_idx, row in enumerate(pivot_df.itertuples(index=False)):
+                # Code (Raw Material column)
+                item_code = QTableWidgetItem(str(row[0]))
                 item_code.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                font = QFont("Segoe UI", 9, QFont.Weight.Bold)
+                item_code.setFont(font)
                 self.table_widget.setItem(row_idx, 0, item_code)
 
                 # Values
-                for col_offset, month in enumerate(self.month_years_for_headers, 1):
-                    qty = row[month]
+                for col_offset, qty in enumerate(row[1:], 1):
                     item = QTableWidgetItem(f"{qty:.2f}")
                     item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                     if qty > 0:
