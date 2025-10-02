@@ -296,6 +296,14 @@ class RawMaterialApp(QWidget):
             values="qty used", aggfunc="sum", fill_value=0
         )
 
+        def custom_sort_key(text):
+            s = str(text)
+            # Determine if the first character is a digit
+            first_is_digit = s[0].isdigit()
+            # Return a tuple:
+            #   (0 if starts with letter, 1 if starts with digit, natural sort key)
+            return (1 if first_is_digit else 0, natural_keys(s))
+
         def natural_keys(text):
             return tuple(int(s) if s.isdigit() else s.lower() for s in re.split(r'(\d+)', str(text)))
 
@@ -320,7 +328,7 @@ class RawMaterialApp(QWidget):
 
         pivot_df = pivot_df.sort_values(
             by=["len_category", "raw material"],
-            key=lambda col: col.map(natural_keys) if col.name == "raw material" else col
+            key=lambda col: col.map(custom_sort_key) if col.name == "raw material" else col
         )
         pivot_df = pivot_df.drop(columns=["len_category"])
 
