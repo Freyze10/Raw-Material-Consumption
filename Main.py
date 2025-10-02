@@ -27,14 +27,6 @@ class RawMaterialApp(QWidget):
         self.init_ui()
         self.apply_styles()
 
-    # ---------------- DEBOUNCING METHOD ----------------
-    def setup_finished_typing(self, line_edit, callback, delay=800):
-        timer = QTimer()
-        timer.setSingleShot(True)
-        timer.timeout.connect(callback)
-        line_edit.textChanged.connect(lambda: timer.start(delay))
-        return timer
-
     # ---------------- UI SETUP ----------------
     def init_ui(self):
         main_layout = QVBoxLayout()
@@ -148,11 +140,18 @@ class RawMaterialApp(QWidget):
                 background-color: #4C6CDA; /* Darker blue on press */
             }
             QTableWidget {
+                content: "code";
                 border: 1px solid #D1D9E0;
                 gridline-color: #E0E0E0;
                 background-color: #FFFFFF;
                 selection-background-color: #6C7BEC;
                 selection-color: #FFFFFF;
+            }
+            QTableCornerButton::section {
+                background-color: #DDE4ED;
+                font-weight: bold;
+                font-size: 10pt;
+                padding: 6px;
             }
             QHeaderView::section {
                 background-color: #DDE4ED;
@@ -346,7 +345,7 @@ class RawMaterialApp(QWidget):
                     self.table_widget.setItem(row_idx, col_offset, item)
         finally:
             self.table_widget.setUpdatesEnabled(True)
-
+        self.table_widget.verticalScrollBar().setValue(0)
         self._pivot_df = pivot_df
 
     # ---------------- EXPORT ----------------
@@ -366,6 +365,14 @@ class RawMaterialApp(QWidget):
             QMessageBox.information(self, "Success", f"Exported to {file_name}")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error exporting: {e}")
+
+    # ---------------- DEBOUNCING METHOD ----------------
+    def setup_finished_typing(self, line_edit, callback, delay=800):
+        timer = QTimer()
+        timer.setSingleShot(True)
+        timer.timeout.connect(callback)
+        line_edit.textChanged.connect(lambda: timer.start(delay))
+        return timer
 
 
 if __name__ == "__main__":
