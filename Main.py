@@ -1,4 +1,5 @@
 import sys
+import os
 import re
 import pandas as pd
 from datetime import datetime
@@ -6,9 +7,9 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QComboBox, QLineEdit, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView,
-    QFileDialog, QMessageBox, QProgressDialog
+    QFileDialog, QMessageBox, QProgressDialog, QCompleter
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QStringListModel
 from PyQt6.QtGui import QColor, QFont
 
 
@@ -68,12 +69,20 @@ class RawMaterialApp(QWidget):
         input_action_layout.addWidget(QLabel("<b>Start Year:</b>"))
         self.year_edit = QLineEdit()
         self.year_edit.setFont(QFont("Segoe UI", 10))
-        self.year_edit.setPlaceholderText("e.g., 2023")
+        self.year_edit.setPlaceholderText("ex. 2023")
         self.year_edit.setText(str(datetime.now().year - 1))
         self.year_edit.setFixedWidth(70)
-        self.setup_finished_typing(self.year_edit, self.generate_table)
         self.year_edit.returnPressed.connect(self.generate_table)
         input_action_layout.addWidget(self.year_edit)
+
+        # year completer
+        current_year = datetime.now().year
+        years = [str(year) for year in range(2000, current_year + 1)]
+        completer = QCompleter()
+        model = QStringListModel(years)
+        completer.setModel(model)
+        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.year_edit.setCompleter(completer)
 
         # Filter dropdown
         input_action_layout.addWidget(QLabel("<b>Display Filter:</b>"))
@@ -92,6 +101,7 @@ class RawMaterialApp(QWidget):
         self.search_edit.setPlaceholderText("Enter material code...")
         self.search_edit.setFixedWidth(180)
         self.setup_finished_typing(self.search_edit, self.search_table)
+        self.search_edit.returnPressed.connect(self.search_table)
         input_action_layout.addWidget(self.search_edit)
 
         # Buttons
@@ -210,7 +220,9 @@ class RawMaterialApp(QWidget):
 
     # ---------------- LOAD EXCEL ----------------
     def load_data_from_excel(self):
-        file_name, _ = QFileDialog.getOpenFileName(self, "Open Excel File", "", "Excel Files (*.xlsx *.xls)")
+        documents_path = os.path.expanduser("~/Documents")
+        file_name, _ = QFileDialog.getOpenFileName(self, "Open Excel File", documents_path,
+                                                   "Excel Files (*.xlsx *.xls)")
         if not file_name:
             return
 
