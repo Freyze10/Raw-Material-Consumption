@@ -1,0 +1,44 @@
+Option 1: Using Conda
+
+1. Create the environment from the YAML file
+   Run this command in terminal:
+   conda env create -f environment.yml
+
+2. Activate the environment
+   After it finishes installing, activate the environment by running:
+   conda activate RM-Consumption
+
+3. Verify installation (optional)
+   You can check the installed packages with:
+   conda list
+
+
+
+Option 2: pip with a virtual environment:
+
+1. Create a virtual environment
+   Inside the project folder, run:
+   python -m venv .venv
+
+2. Activate the virtual environment
+   - On Windows:
+     .venv\Scripts\activate
+   - On macOS/Linux:
+     source .venv/bin/activate
+
+3. Install the packages from requirements.txt
+   pip install -r requirements.txt
+
+4. Verify installation (optional)
+   pip list
+
+
+
+
+
+1. conda env create -f environment.yml
+2. conda activate RM-Consumption
+
+
+for pip
+pip install -r requirements.txt

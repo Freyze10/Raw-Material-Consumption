@@ -1,0 +1,12 @@
+name: RM-Consumption
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - numpy==2.3.3
+      - pandas==2.3.3
+      - openpyxl==3.1.5
+      - PyQt6==6.9.1
